@@ -1,7 +1,12 @@
 from http import HTTPStatus
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+
+from luestilo_api.database import get_session
+from luestilo_api.models import Client 
 from luestilo_api.schemas import (
     ClientDB,
     ClientList,
@@ -33,6 +38,7 @@ def read_root():
     '/clients/', status_code=HTTPStatus.CREATED, response_model=ClientPublic
 )
 def create_client(client: ClientSchema):
+    session = get_session()
     client_with_id = ClientDB(
         **client.model_dump(), id=len(client_database) + 1
     )
