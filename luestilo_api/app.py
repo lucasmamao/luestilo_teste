@@ -2,29 +2,24 @@ from http import HTTPStatus
 
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from luestilo_api.database import get_session
-from luestilo_api.models import Client
+from luestilo_api.models import Client, Order, OrderProduct, Product
 from luestilo_api.schemas import (
     ClientList,
     ClientPublic,
     ClientSchema,
     Message,
-    OrderDB,
+    OrderCreateSchema,
     OrderList,
     OrderPublic,
-    OrderSchema,
-    ProductDB,
     ProductList,
     ProductPublic,
     ProductSchema,
 )
 
 app = FastAPI()
-client_database = []
-product_database = []
-order_database = []
 
 
 @app.get('/', status_code=HTTPStatus.OK, response_model=Message)
@@ -76,8 +71,13 @@ def read_all_clients(
     status_code=HTTPStatus.OK,
     response_model=ClientPublic,
 )
-def read_client(client_id: int):
-    return client_database[client_id - 1]
+def read_client(client_id: int, session: Session = Depends(get_session)):
+    db_client = session.scalar(select(Client).where(Client.id == client_id))
+    if not db_client:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail='Client not found'
+        )
+    return db_client
 
 
 @app.put(
@@ -106,7 +106,7 @@ def update_client(
 
 
 @app.delete(
-    '/client/{client_id}',
+    '/clients/{client_id}',
     status_code=HTTPStatus.OK,
     response_model=Message,
 )
@@ -124,91 +124,175 @@ def delete_client(client_id: int, session: Session = Depends(get_session)):
     return {'message': 'Client deleted'}
 
 
-@app.post(
-    '/products/', status_code=HTTPStatus.CREATED, response_model=ProductPublic
-)
-def create_product(product: ProductSchema):
-    product_with_id = ProductDB(
-        **product.model_dump(), id=len(product_database) + 1
+@app.post('/products/', status_code=HTTPStatus.CREATED, response_model=ProductPublic)
+def create_product(product: ProductSchema, session: Session = Depends(get_session)):
+    db_product = session.scalar(
+        select(Product).where(Product.codigo_de_barras == product.codigo_de_barras)
     )
-    product_database.append(product_with_id)
-    return product_with_id
+    if db_product:
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail='Product with this barcode already exists',
+        )
+
+    db_product = Product(**product.model_dump())
+    session.add(db_product)
+    session.commit()
+    session.refresh(db_product)
+    return db_product
 
 
 @app.get('/products/', status_code=HTTPStatus.OK, response_model=ProductList)
-def read_all_products():
-    return {'products': product_database}
+def read_all_products(skip: int = 0, limit: int = 100, session: Session = Depends(get_session)):
+    products = session.scalars(select(Product).offset(skip).limit(limit)).all()
+    return {'products': products}
 
 
-@app.get(
-    '/products/{product_id}',
-    status_code=HTTPStatus.OK,
-    response_model=ProductPublic,
-)
-def read_product(product_id: int):
-    return product_database[product_id - 1]
+@app.get('/products/{product_id}', status_code=HTTPStatus.OK, response_model=ProductPublic)
+def read_product(product_id: int, session: Session = Depends(get_session)):
+    db_product = session.scalar(select(Product).where(Product.id == product_id))
+    if not db_product:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail='Product not found'
+        )
+    return db_product
 
 
-@app.put(
-    '/products/{product_id}',
-    status_code=HTTPStatus.OK,
-    response_model=ProductPublic,
-)
-def update_product(product_id: int, product: ProductSchema):
-    product_with_id = ProductDB(**product.model_dump(), id=product_id)
-    product_database[product_id - 1] = product_with_id
+@app.put('/products/{product_id}', status_code=HTTPStatus.OK, response_model=ProductPublic)
+def update_product(product_id: int,
+    product: ProductSchema,
+    session: Session = Depends(get_session)
+):
+    db_product = session.scalar(select(Product).where(Product.id == product_id))
+    if not db_product:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail='Product not found'
+        )
 
-    return product_with_id
+    if db_product.codigo_de_barras != product.codigo_de_barras:
+        existing_product = session.scalar(
+            select(Product).where(
+                (Product.id != product_id) &
+                (Product.codigo_de_barras == product.codigo_de_barras)
+            )
+        )
+        if existing_product:
+            raise HTTPException(
+                status_code=HTTPStatus.CONFLICT,
+                detail='Product with this barcode already exists for another product',
+            )
+
+    for key, value in product.model_dump(exclude_unset=True).items():
+        setattr(db_product, key, value)
+
+    session.commit()
+    session.refresh(db_product)
+    return db_product
 
 
-@app.delete(
-    '/products/{product_id}',
-    status_code=HTTPStatus.OK,
-    response_model=ProductPublic,
-)
-def delete_product(product_id: int):
-    return product_database.pop(product_id - 1)
+@app.delete('/products/{product_id}', status_code=HTTPStatus.OK, response_model=Message)
+def delete_product(product_id: int, session: Session = Depends(get_session)):
+    db_product = session.scalar(select(Product).where(Product.id == product_id))
+    if not db_product:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail='Product not found'
+        )
+    session.delete(db_product)
+    session.commit()
+    return {'message': 'Product deleted'}
 
 
-@app.post(
-    '/orders/', status_code=HTTPStatus.CREATED, response_model=OrderPublic
-)
-def create_order(order: OrderSchema):
-    order_with_id = OrderDB(**order.model_dump(), id=len(order_database) + 1)
-    order_database.append(order_with_id)
-    return order_with_id
+@app.post('/orders/', status_code=HTTPStatus.CREATED, response_model=OrderPublic)
+def create_order(order_data: OrderCreateSchema, session: Session = Depends(get_session)):
+
+    db_client = session.scalar(select(Client).where(Client.id == order_data.client_id))
+    if not db_client:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail='Client not found'
+        )
+
+    db_order = Order(
+        client_id=order_data.client_id,
+        status=order_data.status,
+        periodo=order_data.periodo
+    )
+    session.add(db_order)
+    session.flush()
+
+    for item_data in order_data.items:
+        db_product = session.scalar(select(Product).where(Product.id == item_data.product_id))
+        if not db_product:
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND,
+                detail=f'Product with ID {item_data.product_id} not found',
+            )
+
+        price_to_use = item_data.price_at_order if item_data.price_at_order is not None else db_product.valor_de_venda
+
+        db_order_product = OrderProduct(
+            order=db_order,
+            product=db_product,
+            quantity=item_data.quantity,
+            price_at_order=price_to_use
+        )
+        session.add(db_order_product)
+
+    session.commit()
+    session.refresh(db_order)
+    return db_order
 
 
 @app.get('/orders/', status_code=HTTPStatus.OK, response_model=OrderList)
-def read_all_orders():
-    return {'orders': order_database}
+def read_all_orders(skip: int = 0, limit: int = 100, session: Session = Depends(get_session)):
+    orders = session.scalars(
+        select(Order)
+        .options(joinedload(Order.products).joinedload(OrderProduct.product))
+        .offset(skip).limit(limit)
+    ).all()
+    return {'orders': orders}
 
 
-@app.get(
-    '/orders/{order_id}',
-    status_code=HTTPStatus.OK,
-    response_model=OrderPublic,
-)
-def read_order(order_id: int):
-    return order_database[order_id - 1]
+@app.get('/orders/{order_id}', status_code=HTTPStatus.OK, response_model=OrderPublic)
+def read_order(order_id: int, session: Session = Depends(get_session)):
+    db_order = session.scalar(
+        select(Order)
+        .where(Order.id == order_id)
+        .options(joinedload(Order.products).joinedload(OrderProduct.product))
+    )
+    if not db_order:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail='Order not found'
+        )
+    return db_order
 
 
-@app.put(
-    '/orders/{order_id}',
-    status_code=HTTPStatus.OK,
-    response_model=OrderPublic,
-)
-def update_order(order_id: int, order: OrderSchema):
-    order_with_id = OrderDB(**order.model_dump(), id=order_id)
-    order_database[order_id - 1] = order_with_id
+@app.put('/orders/{order_id}', status_code=HTTPStatus.OK, response_model=OrderPublic)
+def update_order(
+    order_id: int,
+    order_update_data: OrderCreateSchema,
+    session: Session = Depends(get_session)
+):
+    db_order = session.scalar(select(Order).where(Order.id == order_id))
+    if not db_order:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail='Order not found'
+        )
 
-    return order_with_id
+    db_order.status = order_update_data.status
+    db_order.periodo = order_update_data.periodo
+
+    session.commit()
+    session.refresh(db_order)
+    return db_order
 
 
-@app.delete(
-    '/orders/{order_id}',
-    status_code=HTTPStatus.OK,
-    response_model=OrderPublic,
-)
-def delete_order(order_id: int):
-    return order_database.pop(order_id - 1)
+@app.delete('/orders/{order_id}', status_code=HTTPStatus.OK, response_model=Message)
+def delete_order(order_id: int, session: Session = Depends(get_session)):
+    db_order = session.scalar(select(Order).where(Order.id == order_id))
+    if not db_order:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail='Order not found'
+        )
+    session.delete(db_order)
+    session.commit()
+    return {'message': 'Order deleted'}
