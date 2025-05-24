@@ -85,5 +85,15 @@ class OrderProduct:
     quantity: Mapped[int]
     price_at_order: Mapped[float]
 
-    order: Mapped['Order'] = relationship(back_populates='products')
-    product: Mapped['Product'] = relationship(back_populates='order_items')
+    order: Mapped['Order'] = relationship(back_populates='products', init=False)
+    product: Mapped['Product'] = relationship(back_populates='order_items', init=False)
+
+
+@table_registry.mapped_as_dataclass
+class User:
+    __tablename__ = 'users'
+
+    id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    username: Mapped[str] = mapped_column(unique=True)
+    password: Mapped[str]
+    email: Mapped[str] = mapped_column(unique=True)

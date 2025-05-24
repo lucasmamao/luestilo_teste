@@ -1,11 +1,12 @@
 from http import HTTPStatus
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from luestilo_api.database import get_session
-from luestilo_api.models import Client, Order, OrderProduct, Product
+from luestilo_api.models import Client, Order, OrderProduct, Product, User
 from luestilo_api.schemas import (
     ClientList,
     ClientPublic,
@@ -17,6 +18,14 @@ from luestilo_api.schemas import (
     ProductList,
     ProductPublic,
     ProductSchema,
+    Token,
+    UserPublic,
+    UserSchema,
+)
+from luestilo_api.security import (
+    create_access_token,
+    get_password_hash,
+    verify_password,
 )
 
 app = FastAPI()
@@ -204,7 +213,6 @@ def delete_product(product_id: int, session: Session = Depends(get_session)):
 
 @app.post('/orders/', status_code=HTTPStatus.CREATED, response_model=OrderPublic)
 def create_order(order_data: OrderCreateSchema, session: Session = Depends(get_session)):
-
     db_client = session.scalar(select(Client).where(Client.id == order_data.client_id))
     if not db_client:
         raise HTTPException(
@@ -230,8 +238,8 @@ def create_order(order_data: OrderCreateSchema, session: Session = Depends(get_s
         price_to_use = item_data.price_at_order if item_data.price_at_order is not None else db_product.valor_de_venda
 
         db_order_product = OrderProduct(
-            order=db_order,
-            product=db_product,
+            order_id=db_order.id,
+            product_id=db_product.id,
             quantity=item_data.quantity,
             price_at_order=price_to_use
         )
@@ -296,3 +304,64 @@ def delete_order(order_id: int, session: Session = Depends(get_session)):
     session.delete(db_order)
     session.commit()
     return {'message': 'Order deleted'}
+
+
+@app.post('/users/', status_code=HTTPStatus.CREATED, response_model=UserPublic)
+def create_user(user: UserSchema, session: Session = Depends(get_session)):
+    db_user = session.scalar(
+        select(User).where(
+            (User.username == user.username) | (User.email == user.email)
+        )
+    )
+
+    if db_user:
+        if db_user.username == user.username:
+            raise HTTPException(
+                status_code=HTTPStatus.CONFLICT,
+                detail='Username already exists',
+            )
+        elif db_user.email == user.email:
+            raise HTTPException(
+                status_code=HTTPStatus.CONFLICT,
+                detail='Email already exists',
+            )
+
+    hashed_password = get_password_hash(user.password)
+
+    db_user = User(
+        email=user.email,
+        username=user.username,
+        password=hashed_password,
+    )
+
+    session.add(db_user)
+    session.commit()
+    session.refresh(db_user)
+
+    return db_user
+
+
+@app.post('/token', response_model=Token)
+def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+
+
+    session: Session = Depends(get_session),
+):
+    user = session.scalar(select(User).where(User.email == form_data.username))
+
+    if not user:
+        raise HTTPException(
+            status_code=HTTPStatus.UNAUTHORIZED,
+            detail='Incorrect email or password'
+        )
+
+    if not verify_password(form_data.password, user.password):
+        raise HTTPException(
+            status_code=HTTPStatus.UNAUTHORIZED,
+            detail='Incorrect email or password'
+        )
+
+    access_token = create_access_token(data={'sub': user.email})
+
+    return {'access_token': access_token, 'token_type': 'bearer'}
