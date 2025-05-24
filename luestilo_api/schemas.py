@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, HttpUrl
+from pydantic import BaseModel, ConfigDict, EmailStr, HttpUrl
 from pydantic_br import CPF
 
 
@@ -16,14 +16,11 @@ class ClientSchema(BaseModel):
 
 
 class ClientPublic(BaseModel):
+    id: int
     name: str
     cpf: CPF
     email: EmailStr
-    id: int
-
-
-class ClientDB(ClientSchema):
-    id: int
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClientList(BaseModel):
