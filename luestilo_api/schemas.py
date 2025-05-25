@@ -111,3 +111,9 @@ class UserPublic(BaseModel):
 
 class UserList(BaseModel):
     users: list[UserPublic]
+
+
+class CurrentUser(BaseModel):
+    id: int
+    username: str
+    email: EmailStr
