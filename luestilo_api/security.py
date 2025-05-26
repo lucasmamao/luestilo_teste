@@ -9,6 +9,7 @@ from pwdlib import PasswordHash
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from luestilo_api.schemas import CurrentUser
 from luestilo_api.database import get_session
 from luestilo_api.models import User
 
@@ -42,12 +43,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 def get_current_user(
     session: Session = Depends(get_session),
     token: str = Depends(oauth2_scheme),
+) -> CurrentUser:
 
-
-):
     credentials_exception = HTTPException(
-
-
         status_code=HTTPStatus.UNAUTHORIZED,
         detail='Could not validate credentials',
         headers={'WWW-Authenticate': 'Bearer'},
@@ -55,19 +53,26 @@ def get_current_user(
 
     try:
         payload = decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        subject_email = payload.get('sub')
+        subject_identifier: str = payload.get('sub')
 
-        if not subject_email:
+        if not subject_identifier:
             raise credentials_exception
 
     except DecodeError:
         raise credentials_exception
+    except Exception as e: 
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred during token validation: {e}",
+        )
+
 
     user = session.scalar(
-        select(User).where(User.email == subject_email)
+        select(User).where(User.username == subject_identifier) 
     )
 
     if not user:
         raise credentials_exception
 
-    return user
+    
+    return CurrentUser.model_validate(user)

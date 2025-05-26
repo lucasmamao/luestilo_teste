@@ -98,3 +98,4 @@ class User:
     username: Mapped[str] = mapped_column(unique=True)
     password: Mapped[str]
     email: Mapped[str] = mapped_column(unique=True)
+

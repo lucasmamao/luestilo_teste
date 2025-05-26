@@ -7,14 +7,16 @@ from sqlalchemy.orm import Session
 
 from luestilo_api.database import get_session
 from luestilo_api.models import Client
-from luestilo_api.schemas import ClientList, ClientPublic, ClientSchema, Message
+from luestilo_api.schemas import ClientList, ClientPublic, ClientSchema, Message, CurrentUser
+from luestilo_api.security import get_current_user
 
 router = APIRouter(prefix='/clients', tags=['clients'])
 
 
 @router.post('/', status_code=HTTPStatus.CREATED, response_model=ClientPublic)
 def create_client(
-    client: ClientSchema, session: Session = Depends(get_session)
+    client: ClientSchema, session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     db_client = session.scalar(
         select(Client).where(
@@ -47,7 +49,8 @@ def read_all_clients(
     limit: int = 100,
     name: Optional[str] = Query(None, description="Filtrar por nome do cliente (parcial, case-insensitive)"),
     email: Optional[str] = Query(None, description="Filtrar por e-mail do cliente (parcial, case-insensitive)"),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     query = select(Client).where(Client.is_active == True)
 
@@ -69,7 +72,7 @@ def read_all_clients(
     status_code=HTTPStatus.OK,
     response_model=ClientPublic,
 )
-def read_client(client_id: int, session: Session = Depends(get_session)):
+def read_client(client_id: int, session: Session = Depends(get_session), current_user: CurrentUser = Depends(get_current_user)):
     db_client = session.scalar(select(Client).where(Client.id == client_id))
     if not db_client:
         raise HTTPException(
@@ -87,6 +90,7 @@ def update_client(
     client_id: int,
     client: ClientSchema,
     session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     db_client = session.scalar(select(Client).where(Client.id == client_id))
     if not db_client:
@@ -108,7 +112,11 @@ def update_client(
     status_code=HTTPStatus.OK,
     response_model=Message,
 )
-def delete_client(client_id: int, session: Session = Depends(get_session)):
+def delete_client(
+    client_id: int, 
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
+):
     db_client = session.scalar(select(Client).where(Client.id == client_id))
 
     if not db_client:

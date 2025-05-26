@@ -101,7 +101,6 @@ class UserPublic(BaseModel):
     id: int
     username: str
     email: EmailStr
-    is_active: bool
 
 
 class UserList(BaseModel):
@@ -109,6 +108,7 @@ class UserList(BaseModel):
 
 
 class CurrentUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     username: str
     email: EmailStr

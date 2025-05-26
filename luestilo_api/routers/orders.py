@@ -6,15 +6,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from luestilo_api.security import get_current_user
 from luestilo_api.database import get_session
 from luestilo_api.models import Client, Order, OrderProduct, Product
-from luestilo_api.schemas import Message, OrderCreateSchema, OrderList, OrderPublic
+from luestilo_api.schemas import Message, OrderCreateSchema, OrderList, OrderPublic, CurrentUser
 
 router = APIRouter(prefix='/orders', tags=['orders'])
 
 
 @router.post('/', status_code=HTTPStatus.CREATED, response_model=OrderPublic)
-def create_order(order_data: OrderCreateSchema, session: Session = Depends(get_session)):
+def create_order(
+    order_data: OrderCreateSchema, 
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
+):
     db_client = session.scalar(select(Client).where(Client.id == order_data.client_id))
     if not db_client:
         raise HTTPException(
@@ -71,7 +76,8 @@ def read_all_orders(
     product_section: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     client_id: Optional[int] = Query(None),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     query = select(Order).where(Order.is_active == True)
 
@@ -99,7 +105,10 @@ def read_all_orders(
 
 
 @router.get('/{order_id}', status_code=HTTPStatus.OK, response_model=OrderPublic)
-def read_order(order_id: int, session: Session = Depends(get_session)):
+def read_order(
+    order_id: int, session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)    
+):
     db_order = session.scalar(
         select(Order)
         .where(Order.id == order_id)
@@ -116,7 +125,8 @@ def read_order(order_id: int, session: Session = Depends(get_session)):
 def update_order(
     order_id: int,
     order_update_data: OrderCreateSchema,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     db_order = session.scalar(select(Order).where(Order.id == order_id))
     if not db_order:
@@ -133,7 +143,11 @@ def update_order(
 
 
 @router.delete('/{order_id}', status_code=HTTPStatus.OK, response_model=Message)
-def delete_order(order_id: int, session: Session = Depends(get_session)):
+def delete_order(
+    order_id: int, 
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
+):
     db_order = session.scalar(select(Order).where(Order.id == order_id))
 
     if not db_order:

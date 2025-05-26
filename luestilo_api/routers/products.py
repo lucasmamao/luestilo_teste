@@ -5,14 +5,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from typing import Optional
 
+from luestilo_api.security import get_current_user
 from luestilo_api.database import get_session
 from luestilo_api.models import Product
-from luestilo_api.schemas import ProductList, ProductPublic, ProductSchema, Message
+from luestilo_api.schemas import ProductList, ProductPublic, ProductSchema, Message, CurrentUser
 
 router = APIRouter(prefix='/products', tags=['products']) 
 
 @router.post('/', status_code=HTTPStatus.CREATED, response_model=ProductPublic)
-def create_product(product: ProductSchema, session: Session = Depends(get_session)):
+def create_product(
+    product: ProductSchema, 
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
+):
     db_product = session.scalar(
         select(Product).where(Product.codigo_de_barras == product.codigo_de_barras)
     )
@@ -37,7 +42,8 @@ def read_all_products(
     min_price: Optional[float] = Query(None),
     max_price: Optional[float] = Query(None),
     available: Optional[bool] = Query(None),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     query = select(Product).where(Product.is_active == True)
 
@@ -63,7 +69,11 @@ def read_all_products(
 
 
 @router.get('/{product_id}', status_code=HTTPStatus.OK, response_model=ProductPublic)
-def read_product(product_id: int, session: Session = Depends(get_session)):
+def read_product(
+    product_id: int, 
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
+):
     db_product = session.scalar(select(Product).where(Product.id == product_id))
     if not db_product:
         raise HTTPException(
@@ -75,7 +85,8 @@ def read_product(product_id: int, session: Session = Depends(get_session)):
 @router.put('/{product_id}', status_code=HTTPStatus.OK, response_model=ProductPublic)
 def update_product(product_id: int,
     product: ProductSchema,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     db_product = session.scalar(select(Product).where(Product.id == product_id))
     if not db_product:
@@ -105,7 +116,10 @@ def update_product(product_id: int,
 
 
 @router.delete('/{product_id}', status_code=HTTPStatus.OK, response_model=Message)
-def delete_product(product_id: int, session: Session = Depends(get_session)):
+def delete_product(
+    product_id: int,
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)):
     db_product = session.scalar(select(Product).where(Product.id == product_id))
     if not db_product:
         raise HTTPException(
@@ -120,7 +134,8 @@ def delete_product(product_id: int, session: Session = Depends(get_session)):
 def reactivate_product(
     product_id: int,
     quantity_to_add: int = Query(..., ge=1, description="Quantidade a ser adicionada ao estoque do produto (deve ser maior ou igual a 1)"), 
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     db_product = session.scalar(select(Product).where(Product.id == product_id))
 
