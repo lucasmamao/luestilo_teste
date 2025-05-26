@@ -2,7 +2,7 @@ import json
 from datetime import date
 from typing import List, Optional
 
-from sqlalchemy import Boolean, ForeignKey
+from sqlalchemy import Boolean, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, registry, relationship
 from sqlalchemy.types import Text, TypeDecorator
 
@@ -32,6 +32,8 @@ class Client:
     cpf: Mapped[str] = mapped_column(unique=True)
     email: Mapped[str] = mapped_column(unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    numero_whatsapp: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default=None) 
+    aceita_notificacoes_whatsapp: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     orders: Mapped[List['Order']] = relationship(
         back_populates='client',
         default_factory=list,

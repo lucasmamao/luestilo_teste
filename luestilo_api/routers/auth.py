@@ -16,10 +16,10 @@ from luestilo_api.security import (
     get_password_hash,
     oauth2_scheme,
     verify_password,
+    get_current_user
 )
 
 router = APIRouter(tags=['auth'])
-
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),

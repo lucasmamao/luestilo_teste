@@ -36,7 +36,12 @@ def create_client(
                 detail='Email already exists',
             )
 
-    db_client = Client(name=client.name, cpf=client.cpf, email=client.email)
+    db_client = Client(
+        name=client.name,
+        cpf=client.cpf,
+        email=client.email,
+        numero_whatsapp=client.numero_whatsapp,
+        aceita_notificacoes_whatsapp=client.aceita_notificacoes_whatsapp)
     session.add(db_client)
     session.commit()
     session.refresh(db_client)

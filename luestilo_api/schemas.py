@@ -13,6 +13,13 @@ class ClientSchema(BaseModel):
     name: str
     cpf: CPF
     email: EmailStr
+    numero_whatsapp: Optional[str] = Field(
+        None, 
+        pattern=r"^\+?[0-9]{10,15}$"
+    )
+    aceita_notificacoes_whatsapp: bool = Field(
+        False
+    )
 
 
 class ClientPublic(BaseModel):
@@ -22,7 +29,8 @@ class ClientPublic(BaseModel):
     cpf: str
     email: EmailStr
     is_active: bool
-
+    numero_whatsapp: Optional[str] = Field(None)
+    aceita_notificacoes_whatsapp: bool = Field(False)
 
 class ClientList(BaseModel):
     clients: List[ClientPublic]
@@ -147,3 +155,6 @@ class OrderFilterParams(BaseModel):
     product_section: Optional[str] = Field(None, description="Filtrar pedidos que contenham produtos de uma seção específica (parcial, case-insensitive).")
     status: Optional[str] = Field(None, description="Filtrar por status do pedido (exato, case-insensitive).")
     client_id: Optional[int] = Field(None, description="Filtrar por ID do cliente.")
+
+class SendMessageToClientBody(BaseModel):
+    mensagem: str = Field(..., min_length=1, max_length=1000, description="O conteúdo da mensagem a ser enviada.")
