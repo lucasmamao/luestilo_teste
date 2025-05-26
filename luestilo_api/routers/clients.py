@@ -1,6 +1,7 @@
 from http import HTTPStatus
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,8 +9,8 @@ from luestilo_api.database import get_session
 from luestilo_api.models import Client
 from luestilo_api.schemas import ClientList, ClientPublic, ClientSchema, Message
 
-
 router = APIRouter(prefix='/clients', tags=['clients'])
+
 
 @router.post('/', status_code=HTTPStatus.CREATED, response_model=ClientPublic)
 def create_client(
@@ -42,10 +43,24 @@ def create_client(
 
 @router.get('/', status_code=HTTPStatus.OK, response_model=ClientList)
 def read_all_clients(
-    skip: int = 0, limit: int = 100, session: Session = Depends(get_session)
-    # , current_user: CurrentUser = Depends(get_current_user) # Exemplo de rota protegida
+    skip: int = 0,
+    limit: int = 100,
+    name: Optional[str] = Query(None, description="Filtrar por nome do cliente (parcial, case-insensitive)"),
+    email: Optional[str] = Query(None, description="Filtrar por e-mail do cliente (parcial, case-insensitive)"),
+    session: Session = Depends(get_session)
 ):
-    clients = session.scalars(select(Client).offset(skip).limit(limit)).all()
+    query = select(Client).where(Client.is_active == True)
+
+    if name:
+        query = query.where(Client.name.ilike(f'%{name}%'))
+
+    if email:
+        query = query.where(Client.email.ilike(f'%{email}%'))
+
+    query = query.offset(skip).limit(limit)
+
+    clients = session.scalars(query).all()
+
     return {'clients': clients}
 
 
@@ -101,7 +116,8 @@ def delete_client(client_id: int, session: Session = Depends(get_session)):
             status_code=HTTPStatus.NOT_FOUND, detail='Client not found'
         )
 
-    session.delete(db_client)
+    db_client.is_active = False
+    session.add(db_client)
 
     session.commit()
     return {'message': 'Client deleted'}

@@ -1,26 +1,25 @@
-from datetime import timedelta
 from http import HTTPStatus
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from jwt import DecodeError, decode
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from jwt import decode, DecodeError
 from luestilo_api.database import get_session
 from luestilo_api.models import User
-from luestilo_api.schemas import Message, Token, UserPublic, UserSchema, CurrentUser
+from luestilo_api.schemas import CurrentUser, Token, UserPublic, UserSchema
 from luestilo_api.security import (
+    ALGORITHM,
+    SECRET_KEY,
     create_access_token,
     get_password_hash,
-    verify_password,
     oauth2_scheme,
-    SECRET_KEY,
-    ALGORITHM,
+    verify_password,
 )
 
-
 router = APIRouter(tags=['auth'])
+
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -58,7 +57,6 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return CurrentUser(id=db_user.id, username=db_user.username, email=db_user.email)
-
 
 
 @router.post('/users/', status_code=HTTPStatus.CREATED, response_model=UserPublic)
@@ -115,6 +113,7 @@ def login_for_access_token(
     )
 
     return {'access_token': access_token, 'token_type': 'bearer'}
+
 
 @router.get("/users/me", response_model=UserPublic)
 async def read_users_me(current_user: UserPublic = Depends(get_current_user)):

@@ -1,7 +1,7 @@
 from datetime import date
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pydantic_br import CPF
 
 
@@ -16,15 +16,16 @@ class ClientSchema(BaseModel):
 
 
 class ClientPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
-    cpf: CPF
+    cpf: str
     email: EmailStr
-    model_config = ConfigDict(from_attributes=True)
+    is_active: bool
 
 
 class ClientList(BaseModel):
-    clients: list[ClientPublic]
+    clients: List[ClientPublic]
 
 
 class ProductSchema(BaseModel):
@@ -34,20 +35,24 @@ class ProductSchema(BaseModel):
     secao: str
     estoque_inicial: int
     data_validade: Optional[date] = None
-    imagens: List[str] = []
+    imagens: Optional[List[str]] = None
 
 
-class ProductPublic(ProductSchema):
+class ProductPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-
-
-class ProductDB(ProductSchema):
-    id: int
+    descricao: str
+    valor_de_venda: float
+    codigo_de_barras: str
+    secao: str
+    estoque_inicial: int
+    data_validade: Optional[date] = None
+    imagens: Optional[List[str]] = None
+    is_active: bool
 
 
 class ProductList(BaseModel):
-    products: list[ProductPublic]
+    products: List[ProductPublic]
 
 
 class OrderProductSchema(BaseModel):
@@ -60,22 +65,15 @@ class OrderCreateSchema(BaseModel):
     client_id: int
     status: str
     periodo: date
-    items: List[OrderProductSchema] = []
-
-
-class ProductInOrder(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    descricao: str
-    codigo_de_barras: str
-    valor_de_venda: float
+    items: List[OrderProductSchema]
 
 
 class OrderItemPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    product: ProductInOrder
+    product_id: int
     quantity: int
     price_at_order: float
+    product: ProductPublic
 
 
 class OrderPublic(BaseModel):
@@ -84,16 +82,12 @@ class OrderPublic(BaseModel):
     status: str
     periodo: date
     client_id: int
-    products: List[OrderItemPublic] = []
+    is_active: bool
+    products: List[OrderItemPublic]
 
 
 class OrderList(BaseModel):
     orders: List[OrderPublic]
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
 
 
 class UserSchema(BaseModel):
@@ -103,17 +97,53 @@ class UserSchema(BaseModel):
 
 
 class UserPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     username: str
     email: EmailStr
-    model_config = ConfigDict(from_attributes=True)
+    is_active: bool
 
 
 class UserList(BaseModel):
-    users: list[UserPublic]
+    users: List[UserPublic]
 
 
 class CurrentUser(BaseModel):
     id: int
     username: str
     email: EmailStr
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
+    username: str | None = None
+
+
+class ClientFilterParams(BaseModel):
+    skip: int = Field(0, description="Número de itens a pular (offset).")
+    limit: int = Field(100, description="Número máximo de itens a retornar.")
+    name: Optional[str] = Field(None, description="Filtrar por nome do cliente (parcial, case-insensitive).")
+    email: Optional[EmailStr] = Field(None, description="Filtrar por e-mail do cliente (parcial, case-insensitive).")
+
+
+class ProductFilterParams(BaseModel):
+    skip: int = Field(0, description="Número de itens a pular (offset).")
+    limit: int = Field(100, description="Número máximo de itens a retornar.")
+    secao: Optional[str] = Field(None, description="Filtrar por seção do produto (parcial, case-insensitive).")
+    min_price: Optional[float] = Field(None, description="Filtrar produtos com preço de venda a partir deste valor.")
+    max_price: Optional[float] = Field(None, description="Filtrar produtos com preço de venda até este valor.")
+    available: Optional[bool] = Field(None, description="Filtrar produtos disponíveis em estoque (True para >0, False para <=0).")
+
+
+class OrderFilterParams(BaseModel):
+    skip: int = Field(0, description="Número de itens a pular (offset).")
+    limit: int = Field(100, description="Número máximo de itens a retornar.")
+    start_periodo: Optional[date] = Field(None, description="Filtrar pedidos a partir desta data (YYYY-MM-DD).")
+    end_periodo: Optional[date] = Field(None, description="Filtrar pedidos até esta data (YYYY-MM-DD).")
+    product_section: Optional[str] = Field(None, description="Filtrar pedidos que contenham produtos de uma seção específica (parcial, case-insensitive).")
+    status: Optional[str] = Field(None, description="Filtrar por status do pedido (exato, case-insensitive).")
+    client_id: Optional[int] = Field(None, description="Filtrar por ID do cliente.")
